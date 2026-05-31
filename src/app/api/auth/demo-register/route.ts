@@ -1,50 +1,55 @@
 import { NextResponse } from 'next/server';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const DEMO_VENUE_ID = 'a3b93478-f7b5-4b08-9df2-aef7318db402';
 
 export async function POST() {
   try {
-    const supabase = await createSupabaseServerClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized: No active session' }, { status: 401 });
-    }
-
     const serviceRoleSupabase = createServiceRoleClient();
 
-    // Check if membership already exists
-    const { data: existingMember, error: queryError } = await serviceRoleSupabase
+    // 1. Generate random sandbox user credentials
+    const randomId = Math.floor(100000 + Math.random() * 900000);
+    const sandboxEmail = `tapmeza.staff.${randomId}@gmail.com`;
+    const sandboxPassword = `SandboxPass123!_${randomId}`;
+
+    // 2. Create the user as pre-confirmed using admin privileges
+    // This completely bypasses "Confirm Email" SMTP blocks and MX verification checks on Supabase.
+    const { data: userData, error: createError } = await serviceRoleSupabase.auth.admin.createUser({
+      email: sandboxEmail,
+      password: sandboxPassword,
+      email_confirm: true,
+    });
+
+    if (createError || !userData.user) {
+      console.error('Error creating pre-confirmed admin user:', createError);
+      return NextResponse.json(
+        { error: createError?.message || 'Failed to create sandbox user.' },
+        { status: 500 }
+      );
+    }
+
+    const userId = userData.user.id;
+
+    // 3. Bind the user to the demo venue in the venue_members table
+    const { error: insertError } = await serviceRoleSupabase
       .from('venue_members')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('venue_id', DEMO_VENUE_ID)
-      .maybeSingle();
+      .insert({
+        user_id: userId,
+        venue_id: DEMO_VENUE_ID,
+        role: 'owner', // Grant owner permissions so they can test everything
+      });
 
-    if (queryError) {
-      console.error('Error querying venue membership:', queryError);
-      return NextResponse.json({ error: 'Database query failed' }, { status: 500 });
+    if (insertError) {
+      console.error('Error binding venue membership:', insertError);
+      return NextResponse.json({ error: 'Failed to bind venue membership' }, { status: 500 });
     }
 
-    if (!existingMember) {
-      // Create owner membership for full testing capabilities
-      const { error: insertError } = await serviceRoleSupabase
-        .from('venue_members')
-        .insert({
-          user_id: user.id,
-          venue_id: DEMO_VENUE_ID,
-          role: 'owner'
-        });
-
-      if (insertError) {
-        console.error('Error creating venue membership:', insertError);
-        return NextResponse.json({ error: 'Failed to bind venue membership' }, { status: 500 });
-      }
-    }
-
-    return NextResponse.json({ success: true });
+    // 4. Return the generated credentials so the client can log in immediately
+    return NextResponse.json({
+      success: true,
+      email: sandboxEmail,
+      password: sandboxPassword,
+    });
   } catch (err: unknown) {
     console.error('Unhandled demo register error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

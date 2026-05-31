@@ -63,36 +63,29 @@ function LoginContent() {
     setSandboxLoading(true);
 
     try {
-      // 1. Generate random sandbox user details
-      const randomId = Math.floor(100000 + Math.random() * 900000);
-      const sandboxEmail = `tapmeza.staff.${randomId}@gmail.com`;
-      const sandboxPassword = `SandboxPass123!_${randomId}`;
-
-      // 2. Sign up user via browser client
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: sandboxEmail,
-        password: sandboxPassword,
-      });
-
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
-
-      if (!signUpData.user) {
-        throw new Error('Sign up failed: User was not created.');
-      }
-
-      // 3. Trigger server API to automatically bind user to venue_members table
+      // 1. Request the server to create a pre-confirmed user and bind it to the demo venue
       const registerRes = await fetch('/api/auth/demo-register', {
         method: 'POST',
       });
 
       if (!registerRes.ok) {
         const errorJson = await registerRes.json();
-        throw new Error(errorJson.error || 'Failed to bind sandbox credentials on server.');
+        throw new Error(errorJson.error || 'Failed to initialize sandbox credentials.');
       }
 
-      // 4. Force state transition and route to Staff Dashboard
+      const { email, password } = await registerRes.json();
+
+      // 2. Sign in immediately with the pre-confirmed credentials
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        throw new Error(signInError.message);
+      }
+
+      // 3. Force state transition and route to Staff Dashboard
       router.push(returnTo);
       router.refresh();
     } catch (err: unknown) {
