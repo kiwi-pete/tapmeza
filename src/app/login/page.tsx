@@ -65,7 +65,7 @@ function LoginContent() {
     try {
       // 1. Generate random sandbox user details
       const randomId = Math.floor(100000 + Math.random() * 900000);
-      const sandboxEmail = `sandbox.staff.${randomId}@tapmeza.com`;
+      const sandboxEmail = `tapmeza.staff.${randomId}@gmail.com`;
       const sandboxPassword = `SandboxPass123!_${randomId}`;
 
       // 2. Sign up user via browser client
