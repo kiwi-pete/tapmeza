@@ -41,7 +41,7 @@ CREATE TABLE locations (
   venue_id uuid NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
   zone_id uuid NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
   label text NOT NULL,
-  qr_token text UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(16), 'hex'),
+  qr_token text UNIQUE NOT NULL DEFAULT encode(extensions.gen_random_bytes(16), 'hex'),
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
 );
