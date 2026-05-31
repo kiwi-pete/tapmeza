@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 interface RouteProps {
@@ -34,14 +33,14 @@ export async function GET(_request: Request, { params }: RouteProps) {
 
     if (orderError) {
       console.error('Database connection error checking order status:', orderError);
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'DATABASE_ERROR', message: 'Could not connect to database.' } },
         { status: 500 }
       );
     }
 
     if (!order) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'ORDER_NOT_FOUND', message: 'Order not found.' } },
         { status: 404 }
       );
@@ -76,7 +75,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
     );
   } catch (err) {
     console.error('Server error querying order status:', err);
-    return NextResponse.json(
+    return Response.json(
       { error: { code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected processing error occurred.' } },
       { status: 500 }
     );

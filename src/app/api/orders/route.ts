@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { isWithinDaypart } from '@/lib/time';
@@ -27,7 +26,7 @@ export async function POST(request: Request) {
     try {
       rawBody = JSON.parse(bodyText);
     } catch {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'INVALID_JSON', message: 'Malformed JSON payload.' } },
         { status: 400 }
       );
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
 
     const parsedResult = orderRequestSchema.safeParse(rawBody);
     if (!parsedResult.success) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'VALIDATION_FAILED', message: 'Invalid payload structure.', details: parsedResult.error.format() } },
         { status: 400 }
       );
@@ -62,7 +61,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (locationError || !location) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'LOCATION_NOT_FOUND', message: 'This table location could not be resolved.' } },
         { status: 404 }
       );
@@ -77,7 +76,7 @@ export async function POST(request: Request) {
     } | null;
 
     if (!location.active || !venue || !venue.active) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'VENUE_OR_LOCATION_INACTIVE', message: 'This QR code is no longer active. Please ask staff.' } },
         { status: 400 }
       );
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
       .eq('available', true);
 
     if (itemsError || !dbItems || dbItems.length !== requestedIds.length) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'ITEMS_UNAVAILABLE', message: 'One or more ordered items are unavailable. Please refresh and try again.' } },
         { status: 400 }
       );
@@ -112,7 +111,7 @@ export async function POST(request: Request) {
       .eq('zone_id', location.zone_id);
 
     if (zoneError || !zoneMappings || zoneMappings.length !== requestedIds.length) {
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'ZONE_RESTRICTED', message: 'One or more items are not available in this zone.' } },
         { status: 400 }
       );
@@ -124,7 +123,7 @@ export async function POST(request: Request) {
       const dbItem = dbItemsMap.get(itemId)!;
       const isAvailable = isWithinDaypart(now, dbItem.available_from, dbItem.available_until, venue.timezone);
       if (!isAvailable) {
-        return NextResponse.json(
+        return Response.json(
           { error: { code: 'DAYPART_RESTRICTED', message: `"${dbItem.name}" is outside its daily available hours.` } },
           { status: 400 }
         );
@@ -155,7 +154,7 @@ export async function POST(request: Request) {
 
     if (orderInsertError || !order) {
       console.error('Database error creating order:', orderInsertError);
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'ORDER_CREATION_FAILED', message: 'Database failure creating order. Please contact staff.' } },
         { status: 500 }
       );
@@ -182,14 +181,14 @@ export async function POST(request: Request) {
       // Clean up order to avoid dangling records (best-effort rollback)
       await supabase.from('orders').delete().eq('id', order.id);
       
-      return NextResponse.json(
+      return Response.json(
         { error: { code: 'ITEMS_INSERTION_FAILED', message: 'Database failure saving order details. Please contact staff.' } },
         { status: 500 }
       );
     }
 
     // Return successful order confirmation details
-    return NextResponse.json(
+    return Response.json(
       {
         orderId: order.id,
         totalMinor: calculatedTotalMinor,
@@ -199,7 +198,7 @@ export async function POST(request: Request) {
     );
   } catch (err) {
     console.error('Server error during order placement:', err);
-    return NextResponse.json(
+    return Response.json(
       { error: { code: 'INTERNAL_SERVER_ERROR', message: 'An unexpected database or processing error occurred.' } },
       { status: 500 }
     );

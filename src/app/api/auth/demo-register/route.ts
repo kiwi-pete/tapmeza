@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const DEMO_VENUE_ID = 'a3b93478-f7b5-4b08-9df2-aef7318db402';
@@ -22,7 +21,7 @@ export async function POST() {
 
     if (createError || !userData.user) {
       console.error('Error creating pre-confirmed admin user:', createError);
-      return NextResponse.json(
+      return Response.json(
         { error: createError?.message || 'Failed to create sandbox user.' },
         { status: 500 }
       );
@@ -41,17 +40,17 @@ export async function POST() {
 
     if (insertError) {
       console.error('Error binding venue membership:', insertError);
-      return NextResponse.json({ error: 'Failed to bind venue membership' }, { status: 500 });
+      return Response.json({ error: 'Failed to bind venue membership' }, { status: 500 });
     }
 
     // 4. Return the generated credentials so the client can log in immediately
-    return NextResponse.json({
+    return Response.json({
       success: true,
       email: sandboxEmail,
       password: sandboxPassword,
     });
   } catch (err: unknown) {
     console.error('Unhandled demo register error:', err);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return Response.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
