@@ -10,6 +10,8 @@ const serverSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1).optional(),
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  // Optional: only the Admin Portal's AI menu import needs it.
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
 });
 
 // Validate public environment variables
@@ -36,6 +38,7 @@ if (typeof window === 'undefined') {
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
   });
 
   if (!parsedServer.success) {
@@ -46,7 +49,7 @@ if (typeof window === 'undefined') {
   validatedServerEnv = Object.freeze(parsedServer.data);
 } else {
   // On the client, specifically block access to sensitive server keys without breaking bundler properties checks
-  const serverKeys = new Set(['SUPABASE_SERVICE_ROLE_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']);
+  const serverKeys = new Set(['SUPABASE_SERVICE_ROLE_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'ANTHROPIC_API_KEY']);
   validatedServerEnv = new Proxy({} as ServerEnv, {
     get(target, prop) {
       if (typeof prop === 'string' && serverKeys.has(prop)) {
