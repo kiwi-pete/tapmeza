@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { canManageVenue } from '@/lib/roles';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import StaffDashboard from '@/components/StaffDashboard';
 import Notice from '@/components/Notice';
@@ -35,7 +36,7 @@ export default async function StaffPage() {
   if (!membership || !venueData) {
     return (
       <Notice title="No venue linked to this account" action={<SignOutButton />}>
-        Ask the venue owner to add {user.email ?? 'your account'}.
+        Ask the venue manager to add {user.email ?? 'your account'}.
       </Notice>
     );
   }
@@ -43,7 +44,7 @@ export default async function StaffPage() {
   return (
     <StaffDashboard
       venue={{ id: membership.venue_id, name: venueData.name }}
-      canManage={membership.role === 'owner'}
+      canManage={canManageVenue(membership.role)}
     />
   );
 }

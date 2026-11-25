@@ -33,7 +33,7 @@ function refuse(status: number, message: string) {
 export async function POST(request: Request) {
   const admin = await getAdminContext();
   if (admin.status === 'signed-out') return refuse(401, 'Sign in again to import a menu.');
-  if (admin.status !== 'ok') return refuse(403, 'Only the venue owner can import a menu.');
+  if (admin.status !== 'ok') return refuse(403, 'Only a venue manager can import a menu.');
 
   const apiKey = serverEnv.ANTHROPIC_API_KEY;
   if (!apiKey) return refuse(503, 'Menu import is not switched on for this site yet.');

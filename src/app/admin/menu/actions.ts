@@ -10,7 +10,7 @@ import type { ActionResult } from '@/app/admin/menu/types';
 
 type Admin = Extract<AdminContext, { status: 'ok' }>;
 
-const NOT_ALLOWED = 'Sign in as the venue owner to change the menu.';
+const NOT_ALLOWED = 'Sign in as a venue manager to change the menu.';
 const PRICE_HELP = 'Enter the price as a number, like 12500 or 8.50.';
 const SAVE_FAILED = 'That could not be saved. Check the connection and try again.';
 /** Postgres not-null violation: raised when a delete would clear the menu item link on past order lines. */

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { cache } from 'react';
+import { canManageVenue } from '@/lib/roles';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -15,7 +16,7 @@ export type AdminContext =
   | { status: 'ok'; supabase: ServerClient; userId: string; venue: AdminVenue }
   | { status: 'signed-out' }
   | { status: 'no-venue'; email: string | null }
-  | { status: 'not-owner' };
+  | { status: 'not-manager' };
 
 /**
  * Who is asking, and for which venue. Every Admin Portal page, action and route starts here.
@@ -43,7 +44,7 @@ export const getAdminContext = cache(async (): Promise<AdminContext> => {
   // Cast nested single-relation object safely
   const venueData = membership?.venues as unknown as { name: string; currency: string } | null | undefined;
   if (!membership || !venueData) return { status: 'no-venue', email: user.email ?? null };
-  if (membership.role !== 'owner') return { status: 'not-owner' };
+  if (!canManageVenue(membership.role)) return { status: 'not-manager' };
 
   return {
     status: 'ok',

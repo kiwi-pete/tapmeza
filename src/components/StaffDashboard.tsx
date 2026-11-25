@@ -41,7 +41,7 @@ interface StaffDashboardProps {
     id: string;
     name: string;
   };
-  /** Owners get a link to the Admin Portal. */
+  /** Venue managers get a link to the Admin Portal. */
   canManage: boolean;
 }
 
