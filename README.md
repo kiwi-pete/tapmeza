@@ -6,6 +6,7 @@ Tapmeza is a multi-tenant QR ordering SaaS for hospitality venues (hotels, resta
 - **Framework**: Next.js 15 (App Router), TypeScript (strict mode).
 - **Styling**: Tailwind CSS v4 (with touch target optimizations).
 - **Backend/Database**: Supabase (Postgres + Auth + Realtime + Storage).
+- **AI**: Claude API (`@anthropic-ai/sdk`) for importing a menu from a photo or PDF in the Admin Portal.
 - **Package Manager**: `pnpm`.
 
 ---
@@ -116,3 +117,16 @@ Since Tapmeza is a mobile-first QR ordering application, it is highly recommende
 - **Sensitive Database Operations**: Bypassing client-side exposures is achieved via `src/lib/supabase/service-role.ts`, which is restricted with `import 'server-only'` and throws a runtime error if executed client-side.
 - **Settlement Providers (Phase 3 Seam)**: Isolated settlement logic is implemented inside the `src/lib/settlement/` seam. Live payment integrations (e.g. ClickPesa/Selcom/DPO/Stripe) can be added directly by extending the `SettlementProvider` interface in `src/lib/settlement/types.ts` without modifying the core order system.
 - **Append-only Logs**: Changing or updating lifecycle logs is prevented by `order_events` database level policies.
+
+---
+
+## Admin Portal: menu editor and AI menu import
+
+Venue owners manage their menu at `/admin/menu` (the gear icon on the order board). `/admin/menu/import` turns photos or a PDF of a printed menu into a draft menu, which the owner checks and corrects before anything is saved.
+
+To switch it on:
+
+1. Apply `supabase/migrations/0003_menu_item_sort.sql` to your database (`pnpm supabase db push`, or `pnpm supabase migration up` locally). The Customer App keeps working without it; the menu editor and import need it.
+2. Set `ANTHROPIC_API_KEY` (server-only) in `.env.local` and in your Vercel project. Without it the import page says it is not switched on; everything else works.
+
+Each import is one Claude API call, billed to that key.

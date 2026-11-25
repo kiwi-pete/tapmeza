@@ -26,6 +26,7 @@ One codebase, three surfaces. Internal names:
 
 - Next.js 15 (App Router), TypeScript (strict), Tailwind.
 - Supabase (Postgres + Auth + Realtime + Storage).
+- Claude API via the official `@anthropic-ai/sdk` — used only by the Admin Portal's AI menu import.
 - Google OAuth for Staff App / Admin Portal auth only.
 - Deploy target: Vercel.
 - Package manager: `pnpm`.
@@ -51,10 +52,10 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 - `zones` — `venue_id`, `name` (e.g. "Restaurant", "Pool", "Rooms"), `sort`.
 - `locations` — `venue_id`, `zone_id`, `label` (e.g. "Table 4", "Lounge 7", "Room 210"), `qr_token` (unique, random), `active`.
 - `menu_categories` — `venue_id`, `name`, `sort`.
-- `menu_items` — `venue_id`, `category_id`, `name`, `description`, `price_minor` (integer), `image_url` (nullable), `available` (bool), `available_from` (time, nullable), `available_until` (time, nullable).
+- `menu_items` — `venue_id`, `category_id`, `name`, `description`, `price_minor` (integer), `image_url` (nullable), `available` (bool), `available_from` (time, nullable), `available_until` (time, nullable), `sort` (int, position within its category — the printed menu's order; added in migration `0003`).
 - `menu_item_zones` — join table: which zones a `menu_item` is offered in (a pool menu differs from a room-service menu).
 - `orders` — `venue_id`, `location_id`, `status` (`received` | `preparing` | `ready` | `delivered` | `cancelled`), `currency`, `total_minor` (integer, server-computed), `guest_note` (nullable — hospitality-standard column name for the note the unauthenticated customer leaves), `settlement` (`pay_at_venue` | `charge_to_room`, default `pay_at_venue`).
-- `order_items` — `order_id`, `menu_item_id`, `name_snapshot`, `unit_price_minor_snapshot`, `qty`. Snapshot name and price at order time so later menu edits don't rewrite history.
+- `order_items` — `order_id`, `menu_item_id` (nullable since migration `0003`: cleared if the menu item is later deleted), `name_snapshot`, `unit_price_minor_snapshot`, `qty`. Snapshot name and price at order time so later menu edits don't rewrite history.
 - `order_events` — **append-only** lifecycle log: `order_id`, `status`, `actor` (nullable staff user id), `at`. Never updated or deleted; the current `orders.status` is the latest event's status.
 
 **RLS rules:** Staff App and Admin Portal reads/writes are allowed only where a `venue_members` row links the authenticated user to that `venue_id`. The Customer App has no authenticated access; all Customer App reads (menu) and writes (order) go through server route handlers using the service role, which validate the `qrToken` first.
@@ -72,6 +73,8 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 
 ### Phase 2 — Admin Portal
 - `/admin`: Google OAuth login, venue context from `venue_members`.
+- **Built so far:** `/admin/menu` (add, edit, hide and delete items and categories, zone tagging) and `/admin/menu/import` (AI import from photos or a PDF — see "AI menu import" below). Owners only.
+- **Still to build:** zone management, item photos (Supabase Storage), daypart times, manual reordering, and everything in the bullets below.
 - Manage zones, menu categories, and menu items (incl. image upload to Supabase Storage, availability toggle, daypart times, zone tagging).
 - Manage locations and **generate printable QR codes** (one per location, encoding the correct URL) using the `qrcode` library; provide a print-friendly sheet.
 - Order history with basic filters (date, status, zone).
@@ -97,11 +100,22 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 
 ## Implementation Notes
 
-- Env vars: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), Google OAuth client id/secret via Supabase Auth.
+- Env vars: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `ANTHROPIC_API_KEY` (server-only, optional — without it the AI menu import reports that it is not switched on; everything else works), Google OAuth client id/secret via Supabase Auth.
 - Suggested structure: `app/o/[venueSlug]/[qrToken]/` (Customer App), `app/staff/` (Staff App), `app/admin/` (Admin Portal), `app/api/orders/route.ts` (place order), `app/api/orders/[id]/status/route.ts` (Customer App poll), `lib/supabase/` (server + browser clients), `lib/settlement/`, `supabase/migrations/`.
 - Daypart filtering uses the venue `timezone` (default `Africa/Dar_es_Salaam`, EAT/UTC+3), not the server clock.
 - Staff App realtime: subscribe to `orders` filtered by `venue_id` and active statuses; on insert/update, refresh the relevant card.
 - Mobile-first Customer App UI; large tap targets (min 44px); works on a mid-range Android phone over 3G.
+
+---
+
+## Admin Portal and AI menu import
+
+- **Access.** Every admin page, server action and route starts with `getAdminContext()` (`src/lib/admin.ts`): signed in, member of a venue, role `owner`. Reads and writes then use that user's Supabase client, so RLS still scopes everything to the venue. The service role key is never used in the Admin Portal.
+- **Menu editor** (`/admin/menu`, `src/components/admin/MenuEditor.tsx`, actions in `src/app/admin/menu/actions.ts`). Prices are typed as plain amounts and parsed to integer minor units on the server with `decimalToMinor` (`src/lib/money.ts`) — never a float, never a number from the browser.
+- **AI menu import** (`/admin/menu/import`). The owner photographs or uploads the printed menu; the browser shrinks photos (so a phone photo uploads over a slow link and the upload stays under Vercel's 4.5 MB request limit) and posts them to `POST /api/admin/menu/import`. That route sends the files to Claude (`src/lib/menu-import/extract.ts`) with a JSON-schema-constrained answer (`extractedMenuSchema` in `src/lib/menu-import/schema.ts`) and streams progress, then the result, back as one JSON object per line. **Nothing is saved by the route.** The owner reviews and corrects the draft, and only the `importMenu` server action writes it.
+- **Import rules.** The import only ever adds: categories are matched by name, items already in their category are skipped, and new items keep the printed order via `menu_items.sort`. Items the model was unsure of are flagged, and an item without a readable price cannot be saved. The system prompt lives next to the API call; if you change the answer's shape, change the schema and the prompt together.
+- **Model.** `claude-opus-5-5`, streamed, effort `medium`, server-side refusal fallbacks on. Constants are at the top of `extract.ts`.
+- **Limits.** Up to 10 files and about 4 MB per import; a PDF larger than that has to be photographed instead. The route's `maxDuration` is 300 seconds, which needs Vercel's Fluid compute (the default on new projects).
 
 ---
 
@@ -117,7 +131,7 @@ One design system for all three surfaces. Keep to it so the apps stay consistent
 - **Performance rules.** System font stack only; no `backdrop-blur`, gradients or looping animations; a `loading.tsx` skeleton per data route; observers instead of scroll handlers.
 - **Customer App.** The cart persists in `sessionStorage` per QR token (a reload or Back must not wipe it). The in-progress order id is kept in `localStorage` (`src/lib/active-order.ts`) so the menu can link back to its status screen.
 - **Staff App.** Three columns, New → Preparing → Ready (tabs below the `lg` breakpoint). One tap advances a ticket optimistically with a 6-second Undo; cancel needs a second tap. Ticket age turns amber at 10 minutes and red at 20 (constants in `StaffDashboard.tsx`). An Offline banner shows when realtime drops, and the board resyncs on every reconnect.
-- **Admin Portal (Phase 2, not built yet — `/admin` is a placeholder).** Build lists as full-width tables, one primary action per page, and detail pages with an explicit Save.
+- **Admin Portal.** Full-width lists, one primary action per page, and every edit in a `components/Sheet.tsx` bottom sheet with an explicit Save (the cart uses the same sheet). Destructive actions take a second tap inside the sheet. Admin pages must work on a phone: owners photograph their menu with it.
 
 ---
 
