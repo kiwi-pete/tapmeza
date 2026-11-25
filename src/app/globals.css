@@ -1,46 +1,151 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — the only colours the three apps use.
+ * Components reference these by role (bg-surface, text-muted, bg-accent …), never by raw palette
+ * value, so light/dark and any future per-venue accent are a change in this file only.
+ */
 @theme {
-  --color-brand-sand-light: #faf7f2;
-  --color-brand-sand: #f3ede0;
-  --color-brand-sand-dark: #e5d9c2;
+  --color-canvas: #ffffff; /* page background */
+  --color-surface: #ffffff; /* cards, sheets, bars */
+  --color-fill: #f5f5f4; /* quiet fills: skeletons, pressed states, board background */
+  --color-line: #e7e5e4; /* borders and dividers */
+  --color-ink: #1c1917; /* primary text */
+  --color-muted: #57534e; /* secondary text */
 
-  --color-brand-turquoise-light: #2dd4bf;
-  --color-brand-turquoise: #0d9488;
-  --color-brand-turquoise-dark: #115e59;
+  --color-accent: #0f766e; /* the one action colour */
+  --color-accent-strong: #115e59; /* pressed / hover */
+  --color-accent-soft: #ccfbf1; /* tinted backgrounds */
+  --color-on-accent: #ffffff; /* text on accent */
 
-  --color-brand-charcoal-light: #334155;
-  --color-brand-charcoal: #1e293b;
-  --color-brand-charcoal-dark: #0f172a;
+  --color-warn: #b45309;
+  --color-warn-soft: #fef3c7;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fee2e2;
+  --color-on-danger: #ffffff;
 
-  --spacing-touch-min: 44px;
-}
+  --animate-sheet-up: sheet-up 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-ticket-in: ticket-in 0.25s ease-out;
 
-:root {
-  --background: var(--color-brand-sand-light);
-  --foreground: var(--color-brand-charcoal-dark);
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes ticket-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: var(--color-brand-charcoal-dark);
-    --foreground: var(--color-brand-sand-light);
+    --color-canvas: #0c0a09;
+    --color-surface: #1c1917;
+    --color-fill: #292524;
+    --color-line: #3f3a36;
+    --color-ink: #fafaf9;
+    --color-muted: #a8a29e;
+
+    --color-accent: #2dd4bf;
+    --color-accent-strong: #5eead4;
+    --color-accent-soft: #134e4a;
+    --color-on-accent: #042f2e;
+
+    --color-warn: #fbbf24;
+    --color-warn-soft: #422006;
+    --color-danger: #f87171;
+    --color-danger-soft: #450a0a;
+    --color-on-danger: #450a0a;
   }
 }
 
-body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* No double-tap zoom delay on anything tappable. */
+  a,
+  button,
+  input,
+  textarea,
+  label {
+    touch-action: manipulation;
+  }
+
+  button:not(:disabled),
+  label:has(input[type="radio"]) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
-/* Base utility for interactive elements to guarantee minimum tap target sizing */
-.tap-target {
-  min-height: var(--spacing-touch-min);
-  min-width: var(--spacing-touch-min);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Shared controls. Every tappable control is at least 44px tall. */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-base font-semibold transition-colors select-none disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-accent text-on-accent hover:bg-accent-strong active:bg-accent-strong;
+  }
+  .btn-secondary {
+    @apply border border-line bg-surface text-ink hover:bg-fill active:bg-fill;
+  }
+  .btn-danger {
+    @apply bg-danger text-on-danger;
+  }
+  .icon-btn {
+    @apply inline-flex size-11 shrink-0 items-center justify-center rounded-full text-ink transition-colors hover:bg-fill active:bg-fill disabled:pointer-events-none disabled:opacity-40;
+  }
+  .field {
+    @apply min-h-12 w-full rounded-xl border border-line bg-surface px-4 text-base text-ink placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none disabled:opacity-50;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
