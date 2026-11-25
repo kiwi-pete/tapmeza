@@ -105,7 +105,7 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 - Env vars: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (server-only), `ANTHROPIC_API_KEY` (server-only, optional — without it the AI menu import reports that it is not switched on; everything else works), Google OAuth client id/secret via Supabase Auth.
 - Suggested structure: `app/o/[venueSlug]/[qrToken]/` (Customer App), `app/staff/` (Staff App), `app/admin/` (Admin Portal), `app/api/orders/route.ts` (place order), `app/api/orders/[id]/status/route.ts` (Customer App poll), `lib/supabase/` (server + browser clients), `lib/settlement/`, `supabase/migrations/`.
 - Daypart filtering uses the venue `timezone` (default `Africa/Dar_es_Salaam`, EAT/UTC+3), not the server clock.
-- Staff App realtime: subscribe to `orders` filtered by `venue_id` and active statuses; on insert/update, refresh the relevant card.
+- Staff App realtime: subscribe to `orders` filtered by `venue_id` and active statuses; on insert/update, refresh the relevant card. A 15-second resync backs it up (see UI conventions → Staff App).
 - Mobile-first Customer App UI; large tap targets (min 44px); works on a mid-range Android phone over 3G.
 
 ---
@@ -132,7 +132,7 @@ One design system for all three surfaces. Keep to it so the apps stay consistent
 - **Only what is useful on screen.** No decorative text, badges, ids or helper copy that does not change what the user does next. Minimum text size 13px; minimum tap target 44px.
 - **Performance rules.** System font stack only; no `backdrop-blur`, gradients or looping animations; a `loading.tsx` skeleton per data route; observers instead of scroll handlers.
 - **Customer App.** The cart persists in `sessionStorage` per QR token (a reload or Back must not wipe it). The in-progress order id is kept in `localStorage` (`src/lib/active-order.ts`) so the menu can link back to its status screen.
-- **Staff App.** Three columns, New → Preparing → Ready (tabs below the `lg` breakpoint). One tap advances a ticket optimistically with a 6-second Undo; cancel needs a second tap. Ticket age turns amber at 10 minutes and red at 20 (constants in `StaffDashboard.tsx`). An Offline banner shows when realtime drops, and the board resyncs on every reconnect.
+- **Staff App.** Three columns, New → Preparing → Ready (tabs below the `lg` breakpoint). One tap advances a ticket optimistically with a 6-second Undo; cancel needs a second tap. Ticket age turns amber at 10 minutes and red at 20 (constants in `StaffDashboard.tsx`). An Offline banner shows when realtime drops. Realtime is the fast path; the board also re-reads its orders on every reconnect, on wake, and every 15 seconds as a safety net, so a missed realtime event delays a ticket by seconds instead of losing it. Do not remove that timer.
 - **Admin Portal.** Full-width lists, one primary action per page, and every edit in a `components/Sheet.tsx` bottom sheet with an explicit Save (the cart uses the same sheet). Destructive actions take a second tap inside the sheet. Admin pages must work on a phone: owners photograph their menu with it.
 
 ---
