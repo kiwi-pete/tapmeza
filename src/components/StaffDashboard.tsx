@@ -76,6 +76,11 @@ const LATE_AFTER_MIN = 20;
 const UNDO_WINDOW_MS = 6000;
 /** Ignore a second tap this soon after a ticket moves, so a double-tap can't advance its neighbour. */
 const TAP_GUARD_MS = 400;
+/**
+ * How often the board re-reads its orders even when realtime looks healthy. Realtime is the fast path
+ * (about a second); this bounds the damage if an event is ever missed to a short delay, not a lost order.
+ */
+const SAFETY_RESYNC_MS = 15000;
 const SOUND_KEY = 'tapmeza.staff.sound';
 
 function oldestFirst(orders: Order[]): Order[] {
@@ -207,10 +212,14 @@ export default function StaffDashboard({ venue, canManage }: StaffDashboardProps
     [supabase]
   );
 
-  // First load, the ticket-age clock, and a resync whenever the tablet wakes or regains its connection.
+  // First load, then a safety-net resync on a timer (which also moves the ticket-age clock),
+  // and at once whenever the tablet wakes or regains its connection.
   useEffect(() => {
     void loadOrders();
-    const clock = window.setInterval(() => setNow(Date.now()), 15000);
+    const clock = window.setInterval(() => {
+      setNow(Date.now());
+      if (!document.hidden) void loadOrders();
+    }, SAFETY_RESYNC_MS);
     const resync = () => {
       if (document.hidden) return;
       setNow(Date.now());
