@@ -39,6 +39,8 @@ interface MenuItemResult {
   available_from: string | null;
   available_until: string | null;
   category_id: string;
+  /** Position within the category. Absent until migration 0003 has been applied. */
+  sort?: number;
   menu_categories: {
     id: string;
     name: string;
@@ -103,18 +105,11 @@ export default async function MenuPage({ params }: PageProps) {
   let activeItems: MenuItemResult[] = [];
 
   if (menuItemIds.length > 0) {
+    // '*' rather than a column list, so this page keeps working whether or not the sort column exists yet.
     const { data: rawItems, error: itemsError } = await supabase
       .from('menu_items')
       .select(`
-        id,
-        name,
-        description,
-        price_minor,
-        image_url,
-        available,
-        available_from,
-        available_until,
-        category_id,
+        *,
         menu_categories (
           id,
           name,
@@ -159,12 +154,22 @@ export default async function MenuPage({ params }: PageProps) {
     group.items.push(item);
   });
 
-  // Sort categories by sort number, and items within categories alphabetically by name
+  // Categories and items in menu order (their sort number), then by name.
+  // Only the fields the menu shows are sent to the browser.
   const groupedCategories = Object.values(categoriesMap)
-    .sort((a, b) => a.sort - b.sort)
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
     .map(category => ({
-      ...category,
-      items: category.items.sort((a, b) => a.name.localeCompare(b.name)),
+      id: category.id,
+      name: category.name,
+      items: category.items
+        .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name))
+        .map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price_minor: item.price_minor,
+          image_url: item.image_url,
+        })),
     }));
 
   return (
