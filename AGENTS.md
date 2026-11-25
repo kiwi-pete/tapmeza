@@ -105,6 +105,22 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 
 ---
 
+## UI conventions
+
+One design system for all three surfaces. Keep to it so the apps stay consistent.
+
+- **Colour tokens only.** Tailwind v4 is configured in CSS: every colour is a role token in the `@theme` block of `src/app/globals.css` (`canvas`, `surface`, `fill`, `line`, `ink`, `muted`, `accent`, `accent-strong`, `accent-soft`, `on-accent`, `warn`, `warn-soft`, `danger`, `danger-soft`, `on-danger`). There is no `tailwind.config`. Never use raw palette classes (`bg-teal-600`, `text-zinc-500`) or hex values in components. Dark mode is the same tokens overridden under `prefers-color-scheme: dark` — do not add `dark:` colour variants.
+- **One accent colour** (`accent`), and it means "tap this". Amber (`warn`) and red (`danger`) are reserved for attention: guest notes, ageing tickets, errors, destructive confirms.
+- **Shared controls** live in `globals.css`: `.btn` with `.btn-primary | .btn-secondary | .btn-danger`, `.icon-btn`, `.field`. One primary button per screen or card.
+- **Shared vocabulary.** Order statuses and settlement labels come from `src/lib/orders.ts`. Full-screen messages (empty, not found, error) use `components/Notice.tsx`: one headline, at most one line, at most one action. `src/app/error.tsx` gives every page a "Try again".
+- **Only what is useful on screen.** No decorative text, badges, ids or helper copy that does not change what the user does next. Minimum text size 13px; minimum tap target 44px.
+- **Performance rules.** System font stack only; no `backdrop-blur`, gradients or looping animations; a `loading.tsx` skeleton per data route; observers instead of scroll handlers.
+- **Customer App.** The cart persists in `sessionStorage` per QR token (a reload or Back must not wipe it). The in-progress order id is kept in `localStorage` (`src/lib/active-order.ts`) so the menu can link back to its status screen.
+- **Staff App.** Three columns, New → Preparing → Ready (tabs below the `lg` breakpoint). One tap advances a ticket optimistically with a 6-second Undo; cancel needs a second tap. Ticket age turns amber at 10 minutes and red at 20 (constants in `StaffDashboard.tsx`). An Offline banner shows when realtime drops, and the board resyncs on every reconnect.
+- **Admin Portal (Phase 2, not built yet — `/admin` is a placeholder).** Build lists as full-width tables, one primary action per page, and detail pages with an explicit Save.
+
+---
+
 ## Acceptance criteria (Phase 1)
 
 - Scanning a seeded location's QR opens the correct zone menu in the Customer App.
