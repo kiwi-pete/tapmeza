@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Bell, BellOff, LogOut, WifiOff, X } from 'lucide-react';
+import { Bell, BellOff, LogOut, Settings, WifiOff, X } from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { updateOrderStatus } from '@/app/staff/actions';
 import { formatMinor } from '@/lib/money';
@@ -40,6 +41,8 @@ interface StaffDashboardProps {
     id: string;
     name: string;
   };
+  /** Owners get a link to the Admin Portal. */
+  canManage: boolean;
 }
 
 interface Column {
@@ -93,7 +96,7 @@ function locationLabel(order: Order): string {
   return order.locations?.label ?? 'Order';
 }
 
-export default function StaffDashboard({ venue }: StaffDashboardProps) {
+export default function StaffDashboard({ venue, canManage }: StaffDashboardProps) {
   const router = useRouter();
   const [supabase] = useState(createSupabaseBrowserClient);
 
@@ -387,6 +390,11 @@ export default function StaffDashboard({ venue }: StaffDashboardProps) {
           {soundOn ? <Bell size={18} aria-hidden /> : <BellOff size={18} aria-hidden />}
           {soundOn ? 'Sound on' : 'Sound off'}
         </button>
+        {canManage && (
+          <Link href="/admin/menu" aria-label="Manage menu" title="Manage menu" className="icon-btn">
+            <Settings size={20} aria-hidden />
+          </Link>
+        )}
         <button type="button" onClick={signOut} aria-label="Sign out" title="Sign out" className="icon-btn">
           <LogOut size={20} aria-hidden />
         </button>

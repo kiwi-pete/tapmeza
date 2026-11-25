@@ -45,6 +45,30 @@ export function parseMinor(amountString: string): number {
   }
   return Math.round(parsedFloat * 100);
 }
+/** Largest amount a price_minor (int4) column can hold. */
+const MAX_MINOR = 2_147_483_647;
+
+/**
+ * Reads a typed or printed amount ("12,500", "12500", "8.50", "8,5") as integer minor units,
+ * using integer arithmetic only. Returns null when the text is not a plain amount.
+ */
+export function decimalToMinor(text: string): number | null {
+  let cleaned = text.trim().replace(/[\s_']/g, '');
+  // A lone comma followed by one or two digits is a decimal comma ("8,50"); otherwise commas group thousands.
+  cleaned = /^\d+,\d{1,2}$/.test(cleaned) ? cleaned.replace(',', '.') : cleaned.replace(/,/g, '');
+  const match = /^(\d{1,9})(?:\.(\d{1,2}))?$/.exec(cleaned);
+  if (!match) return null;
+  const minor = Number(match[1]) * 100 + Number((match[2] ?? '').padEnd(2, '0'));
+  return minor <= MAX_MINOR ? minor : null;
+}
+
+/** Minor units as a plain editable amount: 1250000 → "12500", 850 → "8.50". */
+export function minorToDecimal(amountMinor: number): string {
+  const whole = Math.trunc(amountMinor / 100);
+  const fraction = amountMinor % 100;
+  return fraction === 0 ? String(whole) : `${whole}.${String(fraction).padStart(2, '0')}`;
+}
+
 export function majorToMinor(amountMajor: number): number {
   return Math.round(amountMajor * 100);
 }

@@ -1,18 +1,6 @@
-import Link from 'next/link';
-import Notice from '@/components/Notice';
+import { redirect } from 'next/navigation';
 
-// PHASE 2: Admin Portal. Menus, zones, QR codes and order history are not built yet.
+// The menu is the Admin Portal's only section so far. Zones, QR codes and order history are still Phase 2.
 export default function AdminPortalPage() {
-  return (
-    <Notice
-      title="Admin isn't available yet"
-      action={
-        <Link href="/staff" className="btn btn-primary">
-          Go to orders
-        </Link>
-      }
-    >
-      Menus, zones and QR codes will be managed here.
-    </Notice>
-  );
+  redirect('/admin/menu');
 }

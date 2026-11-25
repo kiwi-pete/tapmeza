@@ -17,7 +17,7 @@ export default async function StaffPage() {
   // RLS lets a signed-in user read only their own venue_members rows, so the normal client is enough.
   const { data: membership, error: memberError } = await supabase
     .from('venue_members')
-    .select('venue_id, venues(name)')
+    .select('venue_id, role, venues(name)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
     .limit(1)
@@ -40,5 +40,10 @@ export default async function StaffPage() {
     );
   }
 
-  return <StaffDashboard venue={{ id: membership.venue_id, name: venueData.name }} />;
+  return (
+    <StaffDashboard
+      venue={{ id: membership.venue_id, name: venueData.name }}
+      canManage={membership.role === 'owner'}
+    />
+  );
 }
