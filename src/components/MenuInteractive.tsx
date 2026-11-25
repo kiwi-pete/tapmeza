@@ -3,11 +3,12 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Check, Loader2, Minus, Plus, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Minus, Plus, Trash2 } from 'lucide-react';
 import { formatMinor } from '@/lib/money';
 import { readActiveOrder } from '@/lib/active-order';
 import { SETTLEMENT_LABELS, type Settlement } from '@/lib/orders';
 import Notice from '@/components/Notice';
+import Sheet from '@/components/Sheet';
 
 interface MenuItem {
   id: string;
@@ -215,20 +216,6 @@ export default function MenuInteractive({ venue, location, categories }: MenuInt
     if (isCartOpen && itemCount === 0) setIsCartOpen(false);
   }, [isCartOpen, itemCount]);
 
-  useEffect(() => {
-    if (!isCartOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeCart();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
-    };
-  }, [isCartOpen, closeCart]);
-
   const placeOrder = async () => {
     if (isPlacing || itemCount === 0) return;
     setIsPlacing(true);
@@ -365,93 +352,13 @@ export default function MenuInteractive({ venue, location, categories }: MenuInt
       )}
 
       {isCartOpen && (
-        <div className="fixed inset-0 z-50">
-          <div aria-hidden onClick={closeCart} className="absolute inset-0 animate-fade-in bg-black/50" />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cart-title"
-            className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] max-w-xl animate-sheet-up flex-col rounded-t-2xl bg-surface"
-          >
-            <div className="flex items-center justify-between gap-3 py-2 pr-2 pl-4">
-              <div className="min-w-0">
-                <h2 id="cart-title" className="text-lg font-bold">
-                  Your order
-                </h2>
-                <p className="truncate text-sm text-muted">{location.label}</p>
-              </div>
-              <button type="button" onClick={closeCart} disabled={isPlacing} aria-label="Close" className="icon-btn">
-                <X size={22} aria-hidden />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
-              <ul className="divide-y divide-line border-y border-line">
-                {lines.map(({ item, qty }) => (
-                  <li key={item.id} className="flex items-center justify-between gap-3 py-3">
-                    <div className="min-w-0">
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-muted tabular-nums">
-                        {formatMinor(item.price_minor * qty, venue.currency)}
-                      </p>
-                    </div>
-                    <QtyControl
-                      name={item.name}
-                      qty={qty}
-                      disabled={isPlacing}
-                      onChange={(delta) => changeQty(item.id, delta)}
-                    />
-                  </li>
-                ))}
-              </ul>
-
-              <label htmlFor="guest-note" className="sr-only">
-                Note for staff
-              </label>
-              <textarea
-                id="guest-note"
-                rows={2}
-                value={guestNote}
-                onChange={(event) => setGuestNote(event.target.value.slice(0, NOTE_MAX))}
-                disabled={isPlacing}
-                maxLength={NOTE_MAX}
-                placeholder="Allergies or requests (optional)"
-                className="field mt-4 resize-none py-3"
-              />
-              {guestNote.length > NOTE_MAX - 40 && (
-                <p className="mt-1 text-right text-sm text-muted tabular-nums">
-                  {guestNote.length}/{NOTE_MAX}
-                </p>
-              )}
-
-              <fieldset className="mt-3 grid grid-cols-2 gap-2" disabled={isPlacing}>
-                <legend className="sr-only">Payment</legend>
-                {SETTLEMENTS.map((option) => {
-                  const isSelected = option === settlement;
-                  return (
-                    <label
-                      key={option}
-                      className={`flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-3 text-center text-sm font-medium transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
-                        isSelected ? 'border-accent bg-accent-soft text-ink' : 'border-line text-muted'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="settlement"
-                        value={option}
-                        checked={isSelected}
-                        onChange={() => setSettlement(option)}
-                        className="sr-only"
-                      />
-                      {isSelected && <Check size={16} strokeWidth={2.5} aria-hidden />}
-                      {SETTLEMENT_LABELS[option]}
-                    </label>
-                  );
-                })}
-              </fieldset>
-            </div>
-
-            <div className="border-t border-line px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <Sheet
+          title="Your order"
+          subtitle={location.label}
+          onClose={closeCart}
+          canClose={!isPlacing}
+          footer={
+            <>
               {orderError && (
                 <p role="alert" className="mb-3 rounded-xl bg-danger-soft px-4 py-3 text-sm font-medium">
                   {orderError}
@@ -475,9 +382,73 @@ export default function MenuInteractive({ venue, location, categories }: MenuInt
                   </>
                 )}
               </button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <ul className="divide-y divide-line border-y border-line">
+            {lines.map(({ item, qty }) => (
+              <li key={item.id} className="flex items-center justify-between gap-3 py-3">
+                <div className="min-w-0">
+                  <p className="font-medium">{item.name}</p>
+                  <p className="text-sm text-muted tabular-nums">
+                    {formatMinor(item.price_minor * qty, venue.currency)}
+                  </p>
+                </div>
+                <QtyControl
+                  name={item.name}
+                  qty={qty}
+                  disabled={isPlacing}
+                  onChange={(delta) => changeQty(item.id, delta)}
+                />
+              </li>
+            ))}
+          </ul>
+
+          <label htmlFor="guest-note" className="sr-only">
+            Note for staff
+          </label>
+          <textarea
+            id="guest-note"
+            rows={2}
+            value={guestNote}
+            onChange={(event) => setGuestNote(event.target.value.slice(0, NOTE_MAX))}
+            disabled={isPlacing}
+            maxLength={NOTE_MAX}
+            placeholder="Allergies or requests (optional)"
+            className="field mt-4 resize-none py-3"
+          />
+          {guestNote.length > NOTE_MAX - 40 && (
+            <p className="mt-1 text-right text-sm text-muted tabular-nums">
+              {guestNote.length}/{NOTE_MAX}
+            </p>
+          )}
+
+          <fieldset className="mt-3 grid grid-cols-2 gap-2" disabled={isPlacing}>
+            <legend className="sr-only">Payment</legend>
+            {SETTLEMENTS.map((option) => {
+              const isSelected = option === settlement;
+              return (
+                <label
+                  key={option}
+                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-xl border px-3 text-center text-sm font-medium transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
+                    isSelected ? 'border-accent bg-accent-soft text-ink' : 'border-line text-muted'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="settlement"
+                    value={option}
+                    checked={isSelected}
+                    onChange={() => setSettlement(option)}
+                    className="sr-only"
+                  />
+                  {isSelected && <Check size={16} strokeWidth={2.5} aria-hidden />}
+                  {SETTLEMENT_LABELS[option]}
+                </label>
+              );
+            })}
+          </fieldset>
+        </Sheet>
       )}
     </div>
   );
