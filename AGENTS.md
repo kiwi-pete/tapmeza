@@ -48,7 +48,7 @@ One codebase, three surfaces. Internal names:
 All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS enabled.
 
 - `venues` — `id`, `slug` (unique), `name`, `currency` (default `'TZS'`), `timezone` (default `'Africa/Dar_es_Salaam'`), `active`.
-- `venue_members` — links an `auth.users` id to a `venue_id` with `role` (`owner` | `staff`). Drives all Staff App / Admin Portal access.
+- `venue_members` — links an `auth.users` id to a `venue_id` with `role` (`manager` | `staff`). Drives all Staff App / Admin Portal access. The original schema called `manager` `owner`; both are accepted and treated the same (`canManageVenue` in `src/lib/roles.ts`, migration `0004`).
 - `zones` — `venue_id`, `name` (e.g. "Restaurant", "Pool", "Rooms"), `sort`.
 - `locations` — `venue_id`, `zone_id`, `label` (e.g. "Table 4", "Lounge 7", "Room 210"), `qr_token` (unique, random), `active`.
 - `menu_categories` — `venue_id`, `name`, `sort`.
@@ -57,6 +57,8 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 - `orders` — `venue_id`, `location_id`, `status` (`received` | `preparing` | `ready` | `delivered` | `cancelled`), `currency`, `total_minor` (integer, server-computed), `guest_note` (nullable — hospitality-standard column name for the note the unauthenticated customer leaves), `settlement` (`pay_at_venue` | `charge_to_room`, default `pay_at_venue`).
 - `order_items` — `order_id`, `menu_item_id` (nullable since migration `0003`: cleared if the menu item is later deleted), `name_snapshot`, `unit_price_minor_snapshot`, `qty`. Snapshot name and price at order time so later menu edits don't rewrite history.
 - `order_events` — **append-only** lifecycle log: `order_id`, `status`, `actor` (nullable staff user id), `at`. Never updated or deleted; the current `orders.status` is the latest event's status.
+
+**The live database has drifted from `supabase/migrations/0001_init.sql`.** As checked on 2026-11-25, production has an `organizations` / `organization_members` layer with `venues.organization_id`, RLS policies written with helper functions (`is_venue_member`, `is_venue_manager`, `is_org_member_for_venue`), `venue_members` keyed by `(user_id, venue_id)` with no `id` column, and the role `manager` where the migration says `owner`. None of that is in this repo's migrations, so the repo cannot recreate production. Check the live schema before relying on `0001`, write new migrations so they are safe on both shapes, and only touch the tables listed here: the Supabase project also holds other apps' tables.
 
 **RLS rules:** Staff App and Admin Portal reads/writes are allowed only where a `venue_members` row links the authenticated user to that `venue_id`. The Customer App has no authenticated access; all Customer App reads (menu) and writes (order) go through server route handlers using the service role, which validate the `qrToken` first.
 
@@ -73,7 +75,7 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 
 ### Phase 2 — Admin Portal
 - `/admin`: Google OAuth login, venue context from `venue_members`.
-- **Built so far:** `/admin/menu` (add, edit, hide and delete items and categories, zone tagging) and `/admin/menu/import` (AI import from photos or a PDF — see "AI menu import" below). Owners only.
+- **Built so far:** `/admin/menu` (add, edit, hide and delete items and categories, zone tagging) and `/admin/menu/import` (AI import from photos or a PDF — see "AI menu import" below). Venue managers only.
 - **Still to build:** zone management, item photos (Supabase Storage), daypart times, manual reordering, and everything in the bullets below.
 - Manage zones, menu categories, and menu items (incl. image upload to Supabase Storage, availability toggle, daypart times, zone tagging).
 - Manage locations and **generate printable QR codes** (one per location, encoding the correct URL) using the `qrcode` library; provide a print-friendly sheet.
@@ -110,7 +112,7 @@ All tables: `uuid` primary keys, `created_at timestamptz default now()`, RLS ena
 
 ## Admin Portal and AI menu import
 
-- **Access.** Every admin page, server action and route starts with `getAdminContext()` (`src/lib/admin.ts`): signed in, member of a venue, role `owner`. Reads and writes then use that user's Supabase client, so RLS still scopes everything to the venue. The service role key is never used in the Admin Portal.
+- **Access.** Every admin page, server action and route starts with `getAdminContext()` (`src/lib/admin.ts`): signed in, member of a venue, with a managing role (`manager`, or its original name `owner`). Reads and writes then use that user's Supabase client, so RLS still scopes everything to the venue. The service role key is never used in the Admin Portal.
 - **Menu editor** (`/admin/menu`, `src/components/admin/MenuEditor.tsx`, actions in `src/app/admin/menu/actions.ts`). Prices are typed as plain amounts and parsed to integer minor units on the server with `decimalToMinor` (`src/lib/money.ts`) — never a float, never a number from the browser.
 - **AI menu import** (`/admin/menu/import`). The owner photographs or uploads the printed menu; the browser shrinks photos (so a phone photo uploads over a slow link and the upload stays under Vercel's 4.5 MB request limit) and posts them to `POST /api/admin/menu/import`. That route sends the files to Claude (`src/lib/menu-import/extract.ts`) with a JSON-schema-constrained answer (`extractedMenuSchema` in `src/lib/menu-import/schema.ts`) and streams progress, then the result, back as one JSON object per line. **Nothing is saved by the route.** The owner reviews and corrects the draft, and only the `importMenu` server action writes it.
 - **Import rules.** The import only ever adds: categories are matched by name, items already in their category are skipped, and new items keep the printed order via `menu_items.sort`. Items the model was unsure of are flagged, and an item without a readable price cannot be saved. The system prompt lives next to the API call; if you change the answer's shape, change the schema and the prompt together.

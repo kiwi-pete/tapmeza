@@ -35,7 +35,7 @@ export async function POST() {
       .insert({
         user_id: userId,
         venue_id: DEMO_VENUE_ID,
-        role: 'owner', // Grant owner permissions so they can test everything
+        role: 'manager', // The live database's name for the managing role, so they can test everything
       });
 
     if (insertError) {
