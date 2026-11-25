@@ -1,5 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { isOrderStatus, isSettlement } from '@/lib/orders';
 import OrderStatusTracker from '@/components/OrderStatusTracker';
+import Notice from '@/components/Notice';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,20 +19,20 @@ interface OrderResult {
   status: string;
   currency: string;
   total_minor: number;
-  created_at: string;
-  venue_id: string;
-  location_id: string;
+  settlement: string;
   locations: {
-    id: string;
     label: string;
     qr_token: string;
   } | null;
   venues: {
-    id: string;
     slug: string;
     name: string;
-    active: boolean;
   } | null;
+  order_items: {
+    name_snapshot: string;
+    unit_price_minor_snapshot: number;
+    qty: number;
+  }[];
 }
 
 export default async function OrderStatusPage({ params }: PageProps) {
@@ -47,49 +49,43 @@ export default async function OrderStatusPage({ params }: PageProps) {
       status,
       currency,
       total_minor,
-      created_at,
-      venue_id,
-      location_id,
+      settlement,
       locations (
-        id,
         label,
         qr_token
       ),
       venues (
-        id,
         slug,
-        name,
-        active
+        name
+      ),
+      order_items (
+        name_snapshot,
+        unit_price_minor_snapshot,
+        qty
       )
     `)
     .eq('id', orderId)
     .maybeSingle();
 
-  const order = rawOrder as unknown as OrderResult | null;
-
-  // Render a friendly error card if the order does not exist or has a structural mismatch
-  if (
-    orderError || 
-    !order || 
-    !order.venues || 
-    !order.locations || 
-    order.venues.slug !== venueSlug || 
-    order.locations.qr_token !== qrToken
-  ) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6 bg-brand-sand-light text-brand-charcoal-dark dark:bg-brand-charcoal dark:text-brand-sand-light">
-        <div className="max-w-md w-full text-center space-y-4 border border-brand-sand-dark dark:border-brand-charcoal-light p-8 rounded-2xl bg-white dark:bg-brand-charcoal-dark shadow-sm">
-          <div className="text-brand-turquoise text-5xl">🔍</div>
-          <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal-dark dark:text-brand-sand-light">Order Not Found</h1>
-          <p className="text-base text-brand-charcoal-light dark:text-brand-sand-dark leading-relaxed">
-            The requested order could not be located or verified for this table. Please check with venue staff.
-          </p>
-        </div>
-      </div>
-    );
+  // A failed lookup is not the same as a missing order: surface it so the customer can retry.
+  if (orderError) {
+    console.error('Order lookup failed:', orderError);
+    throw new Error('Order lookup failed');
   }
 
-  const { venues: venue, locations: location } = order;
+  const order = rawOrder as unknown as OrderResult | null;
+
+  // The order must belong to the QR code in the URL.
+  if (
+    !order ||
+    !order.venues ||
+    !order.locations ||
+    order.venues.slug !== venueSlug ||
+    order.locations.qr_token !== qrToken ||
+    !isOrderStatus(order.status)
+  ) {
+    return <Notice title="Order not found">Please ask a member of staff.</Notice>;
+  }
 
   return (
     <OrderStatusTracker
@@ -98,11 +94,16 @@ export default async function OrderStatusPage({ params }: PageProps) {
         status: order.status,
         currency: order.currency,
         totalMinor: order.total_minor,
-        createdAt: order.created_at,
-        venueName: venue.name,
-        venueSlug: venue.slug,
-        locationLabel: location.label,
-        qrToken: location.qr_token,
+        settlement: isSettlement(order.settlement) ? order.settlement : 'pay_at_venue',
+        venueName: order.venues.name,
+        venueSlug: order.venues.slug,
+        locationLabel: order.locations.label,
+        qrToken: order.locations.qr_token,
+        items: order.order_items.map((item) => ({
+          name: item.name_snapshot,
+          qty: item.qty,
+          lineMinor: item.unit_price_minor_snapshot * item.qty,
+        })),
       }}
     />
   );
