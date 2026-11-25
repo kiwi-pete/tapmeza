@@ -60,7 +60,16 @@ export async function POST(request: Request) {
       .eq('qr_token', body.qrToken)
       .maybeSingle();
 
-    if (locationError || !location) {
+    // A failed lookup is retryable; only a genuinely unknown token is "not found".
+    if (locationError) {
+      console.error('Database error resolving location:', locationError);
+      return Response.json(
+        { error: { code: 'LOOKUP_FAILED', message: 'Could not place the order right now. Please try again.' } },
+        { status: 500 }
+      );
+    }
+
+    if (!location) {
       return Response.json(
         { error: { code: 'LOCATION_NOT_FOUND', message: 'This table location could not be resolved.' } },
         { status: 404 }
@@ -92,7 +101,15 @@ export async function POST(request: Request) {
       .eq('venue_id', venue.id)
       .eq('available', true);
 
-    if (itemsError || !dbItems || dbItems.length !== requestedIds.length) {
+    if (itemsError) {
+      console.error('Database error loading ordered items:', itemsError);
+      return Response.json(
+        { error: { code: 'LOOKUP_FAILED', message: 'Could not place the order right now. Please try again.' } },
+        { status: 500 }
+      );
+    }
+
+    if (!dbItems || dbItems.length !== requestedIds.length) {
       return Response.json(
         { error: { code: 'ITEMS_UNAVAILABLE', message: 'One or more ordered items are unavailable. Please refresh and try again.' } },
         { status: 400 }
@@ -110,7 +127,15 @@ export async function POST(request: Request) {
       .in('menu_item_id', requestedIds)
       .eq('zone_id', location.zone_id);
 
-    if (zoneError || !zoneMappings || zoneMappings.length !== requestedIds.length) {
+    if (zoneError) {
+      console.error('Database error checking item zones:', zoneError);
+      return Response.json(
+        { error: { code: 'LOOKUP_FAILED', message: 'Could not place the order right now. Please try again.' } },
+        { status: 500 }
+      );
+    }
+
+    if (!zoneMappings || zoneMappings.length !== requestedIds.length) {
       return Response.json(
         { error: { code: 'ZONE_RESTRICTED', message: 'One or more items are not available in this zone.' } },
         { status: 400 }

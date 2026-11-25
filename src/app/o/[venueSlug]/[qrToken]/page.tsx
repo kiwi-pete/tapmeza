@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { isWithinDaypart } from '@/lib/time';
 import MenuInteractive from '@/components/MenuInteractive';
+import Notice from '@/components/Notice';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -18,10 +19,6 @@ interface LocationResult {
   active: boolean;
   qr_token: string;
   zone_id: string;
-  zones: {
-    id: string;
-    name: string;
-  } | null;
   venues: {
     id: string;
     slug: string;
@@ -42,6 +39,8 @@ interface MenuItemResult {
   available_from: string | null;
   available_until: string | null;
   category_id: string;
+  /** Position within the category. Absent until migration 0003 has been applied. */
+  sort?: number;
   menu_categories: {
     id: string;
     name: string;
@@ -64,10 +63,6 @@ export default async function MenuPage({ params }: PageProps) {
       active,
       qr_token,
       zone_id,
-      zones (
-        id,
-        name
-      ),
       venues (
         id,
         slug,
@@ -82,29 +77,17 @@ export default async function MenuPage({ params }: PageProps) {
 
   const location = rawLocation as unknown as LocationResult | null;
 
-  // Reject with readable error card if location, venue, or active states are invalid
-  if (
-    locationError || 
-    !location || 
-    !location.active || 
-    !location.venues || 
-    !location.venues.active || 
-    location.venues.slug !== venueSlug
-  ) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6 bg-brand-sand-light text-brand-charcoal-dark dark:bg-brand-charcoal dark:text-brand-sand-light">
-        <div className="max-w-md w-full text-center space-y-4 border border-brand-sand-dark dark:border-brand-charcoal-light p-8 rounded-2xl bg-white dark:bg-brand-charcoal-dark shadow-sm">
-          <div className="text-brand-turquoise text-5xl">⚠️</div>
-          <h1 className="text-2xl font-bold tracking-tight text-brand-charcoal-dark dark:text-brand-sand-light">Link Inactive</h1>
-          <p className="text-base text-brand-charcoal-light dark:text-brand-sand-dark leading-relaxed">
-            This QR code is no longer active or could not be resolved. Please ask venue staff for assistance.
-          </p>
-        </div>
-      </div>
-    );
+  // A failed lookup is not the same as a dead QR code: surface it so the customer can retry.
+  if (locationError) {
+    console.error('Menu location lookup failed:', locationError);
+    throw new Error('Menu location lookup failed');
   }
 
-  const { venues: venue, zones: zone } = location;
+  if (!location || !location.active || !location.venues || !location.venues.active || location.venues.slug !== venueSlug) {
+    return <Notice title="This QR code isn't active">Please ask a member of staff.</Notice>;
+  }
+
+  const { venues: venue } = location;
 
   // 2. Fetch all menu items linked to this location's zone
   const { data: rawItemZones, error: itemZonesError } = await supabase
@@ -112,23 +95,21 @@ export default async function MenuPage({ params }: PageProps) {
     .select('menu_item_id')
     .eq('zone_id', location.zone_id);
 
+  if (itemZonesError) {
+    console.error('Menu zone lookup failed:', itemZonesError);
+    throw new Error('Menu zone lookup failed');
+  }
+
   const menuItemIds = (rawItemZones || []).map(z => z.menu_item_id);
 
   let activeItems: MenuItemResult[] = [];
 
-  if (!itemZonesError && menuItemIds.length > 0) {
+  if (menuItemIds.length > 0) {
+    // '*' rather than a column list, so this page keeps working whether or not the sort column exists yet.
     const { data: rawItems, error: itemsError } = await supabase
       .from('menu_items')
       .select(`
-        id,
-        name,
-        description,
-        price_minor,
-        image_url,
-        available,
-        available_from,
-        available_until,
-        category_id,
+        *,
         menu_categories (
           id,
           name,
@@ -139,7 +120,12 @@ export default async function MenuPage({ params }: PageProps) {
       .eq('available', true)
       .in('id', menuItemIds);
 
-    if (!itemsError && rawItems) {
+    if (itemsError) {
+      console.error('Menu items lookup failed:', itemsError);
+      throw new Error('Menu items lookup failed');
+    }
+
+    if (rawItems) {
       const now = new Date();
       // Apply timezone-aware daypart filtering in-memory
       const filteredItems = (rawItems as unknown as MenuItemResult[]).filter(item =>
@@ -168,12 +154,22 @@ export default async function MenuPage({ params }: PageProps) {
     group.items.push(item);
   });
 
-  // Sort categories by sort number, and items within categories alphabetically by name
+  // Categories and items in menu order (their sort number), then by name.
+  // Only the fields the menu shows are sent to the browser.
   const groupedCategories = Object.values(categoriesMap)
-    .sort((a, b) => a.sort - b.sort)
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
     .map(category => ({
-      ...category,
-      items: category.items.sort((a, b) => a.name.localeCompare(b.name)),
+      id: category.id,
+      name: category.name,
+      items: category.items
+        .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name))
+        .map(item => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          price_minor: item.price_minor,
+          image_url: item.image_url,
+        })),
     }));
 
   return (
@@ -187,7 +183,6 @@ export default async function MenuPage({ params }: PageProps) {
         label: location.label,
         qrToken: location.qr_token,
       }}
-      zoneName={zone?.name || 'Venue'}
       categories={groupedCategories}
     />
   );
